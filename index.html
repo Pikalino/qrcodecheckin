@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>QR Check-In</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
+
 <body style="text-align:center;font-family:Arial;padding:20px;">
 
 <h2>QR Check-In</h2>
@@ -11,7 +13,7 @@
 <p id="result"></p>
 
 <script>
-const flowUrl = "https://f0e3c06ec378e576bef89b03e45d43.81.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/604430a75a6c471b9e34349ce70ca1f7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=k3AECdPl2iIkAI9d958l20oQaKt7QSmHZ3XxMkr_2uk";
+const flowUrl = "https://f0e3c06ec378e576bef89b03e45d43.81.environment.api.powerplatform.com/powerautomate/automations/direct/workflows/604430a75a6c471b9e34349ce70ca1f7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=k3AECdPl2iIkAI9d958l20oQaKt7QSmHZ3XxMkr_2uk";
 
 function onScanSuccess(decodedText) {
   let token = decodedText;
@@ -31,21 +33,39 @@ function onScanSuccess(decodedText) {
       deviceName: "SharePointScanner"
     })
   })
-  .then(res => res.json())
-  .then(data => {
-    document.getElementById("result").innerText = data.message;
+  .then(async res => {
+    const data = await res.json();
+    document.getElementById("result").innerText = data.message || "Done";
   })
-  .catch(() => {
-    document.getElementById("result").innerText = "Error";
+  .catch(err => {
+    document.getElementById("result").innerText = "Error connecting to flow";
+    console.error(err);
   });
 }
 
-const qr = new Html5Qrcode("reader");
-Html5Qrcode.getCameras().then(devices => {
-  if (devices.length) {
-    qr.start(devices[0].id, { fps: 10, qrbox: 250 }, onScanSuccess);
-  }
-});
+function onScanFailure(error) {
+}
+
+const html5QrCode = new Html5Qrcode("reader");
+
+Html5Qrcode.getCameras()
+  .then(devices => {
+    if (!devices || devices.length === 0) {
+      document.getElementById("result").innerText = "No camera found";
+      return;
+    }
+
+    html5QrCode.start(
+      devices[0].id,
+      { fps: 10, qrbox: 250 },
+      onScanSuccess,
+      onScanFailure
+    );
+  })
+  .catch(err => {
+    document.getElementById("result").innerText = "Camera error";
+    console.error(err);
+  });
 </script>
 
 </body>
