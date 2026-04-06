@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>QR Check-In</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body style="text-align:center;font-family:Arial;padding:20px;">
+
+<h2>QR Check-In</h2>
+<div id="reader" style="width:300px;margin:auto;"></div>
+<p id="result"></p>
+
+<script>
+const flowUrl = "PASTE_YOUR_FLOW_URL_HERE";
+
+function onScanSuccess(decodedText) {
+  let token = decodedText;
+
+  try {
+    const parsed = JSON.parse(decodedText);
+    token = parsed.token;
+  } catch (e) {}
+
+  fetch(flowUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      token: token,
+      deviceName: "SharePointScanner"
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    document.getElementById("result").innerText = data.message;
+  })
+  .catch(() => {
+    document.getElementById("result").innerText = "Error";
+  });
+}
+
+const qr = new Html5Qrcode("reader");
+Html5Qrcode.getCameras().then(devices => {
+  if (devices.length) {
+    qr.start(devices[0].id, { fps: 10, qrbox: 250 }, onScanSuccess);
+  }
+});
+</script>
+
+</body>
+</html>
