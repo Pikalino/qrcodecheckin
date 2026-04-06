@@ -18,19 +18,43 @@
       Check In
     </button>
 
-    <p id="result" style="margin-top:16px;font-weight:bold;"></p>
+    <div id="resultBox" style="margin-top:20px;"></div>
   </div>
 
   <script>
     const flowUrl = "https://f0e3c06ec378e576bef89b03e45d43.81.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/604430a75a6c471b9e34349ce70ca1f7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=k3AECdPl2iIkAI9d958l20oQaKt7QSmHZ3XxMkr_2uk";
 
     let latestDecodedText = "";
-    let scannerStarted = false;
 
-    function setResult(message, color = "black") {
-      const el = document.getElementById("result");
-      el.innerText = message;
-      el.style.color = color;
+    function renderInfo(message, color = "#111827") {
+      const box = document.getElementById("resultBox");
+      box.innerHTML = `
+        <div style="background:#f3f4f6;border:1px solid #d1d5db;padding:14px;border-radius:8px;color:${color};white-space:pre-line;">
+          ${message}
+        </div>
+      `;
+    }
+
+    function renderSuccess(data) {
+      const box = document.getElementById("resultBox");
+      box.innerHTML = `
+        <div style="background:#ecfdf5;border:1px solid #10b981;padding:16px;border-radius:8px;color:#065f46;">
+          <div style="font-size:18px;font-weight:bold;margin-bottom:10px;">Checked In</div>
+          <div><strong>Name:</strong> ${data.employeeName || "-"}</div>
+          <div><strong>ID:</strong> ${data.employeeId || "-"}</div>
+          <div><strong>Time:</strong> ${data.time || "-"}</div>
+        </div>
+      `;
+    }
+
+    function renderError(message) {
+      const box = document.getElementById("resultBox");
+      box.innerHTML = `
+        <div style="background:#fef2f2;border:1px solid #ef4444;padding:16px;border-radius:8px;color:#991b1b;">
+          <div style="font-size:18px;font-weight:bold;margin-bottom:8px;">Error</div>
+          <div>${message}</div>
+        </div>
+      `;
     }
 
     function extractToken(decodedText) {
@@ -48,7 +72,7 @@
       latestDecodedText = decodedText;
       document.getElementById("scannedText").value = decodedText;
       document.getElementById("checkInBtn").disabled = false;
-      setResult("QR detected. Press Check In.", "#0a58ca");
+      renderInfo("QR detected. Press Check In.", "#0a58ca");
     }
 
     function onScanFailure(error) {
@@ -65,8 +89,7 @@
           onScanFailure
         );
 
-        scannerStarted = true;
-        setResult("Camera ready. Point it at the QR code.");
+        renderInfo("Camera ready. Point it at the QR code.");
       } catch (err) {
         try {
           const html5QrCode = new Html5Qrcode("reader");
@@ -78,10 +101,9 @@
             onScanFailure
           );
 
-          scannerStarted = true;
-          setResult("Camera ready. Point it at the QR code.");
+          renderInfo("Camera ready. Point it at the QR code.");
         } catch (err2) {
-          setResult("Camera error: " + err2, "red");
+          renderError("Camera error: " + err2);
           console.error(err2);
         }
       }
@@ -91,12 +113,12 @@
       const token = extractToken(latestDecodedText);
 
       if (!token) {
-        setResult("No valid token found.", "red");
+        renderError("No valid token found.");
         return;
       }
 
       this.disabled = true;
-      setResult("Sending check-in...", "#0a58ca");
+      renderInfo("Sending check-in...", "#0a58ca");
 
       try {
         const response = await fetch(flowUrl, {
@@ -111,9 +133,14 @@
         });
 
         const data = await response.json();
-        setResult(data.message || "Done", data.success ? "green" : "red");
+
+        if (data.success) {
+          renderSuccess(data);
+        } else {
+          renderError(data.message || "Check-in failed.");
+        }
       } catch (err) {
-        setResult("Error connecting to flow.", "red");
+        renderError("Error connecting to flow.");
         console.error(err);
       } finally {
         this.disabled = false;
