@@ -1,72 +1,126 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>QR Check-In</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
+<body style="text-align:center;font-family:Arial,sans-serif;padding:20px;">
+  <h2>QR Check-In</h2>
 
-<body style="text-align:center;font-family:Arial;padding:20px;">
+  <div id="reader" style="width:320px;max-width:100%;margin:0 auto 20px auto;"></div>
 
-<h2>QR Check-In</h2>
-<div id="reader" style="width:300px;margin:auto;"></div>
-<p id="result"></p>
+  <div style="max-width:420px;margin:0 auto;text-align:left;">
+    <label style="font-weight:bold;display:block;margin-bottom:8px;">Scanned value</label>
+    <textarea id="scannedText" rows="4" style="width:100%;padding:10px;box-sizing:border-box;" readonly></textarea>
 
-<script>
-const flowUrl = "https://f0e3c06ec378e576bef89b03e45d43.81.environment.api.powerplatform.com/powerautomate/automations/direct/workflows/604430a75a6c471b9e34349ce70ca1f7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=k3AECdPl2iIkAI9d958l20oQaKt7QSmHZ3XxMkr_2uk";
+    <button id="checkInBtn" style="margin-top:12px;padding:12px 20px;font-size:16px;cursor:pointer;" disabled>
+      Check In
+    </button>
 
-function onScanSuccess(decodedText) {
-  let token = decodedText;
+    <p id="result" style="margin-top:16px;font-weight:bold;"></p>
+  </div>
 
-  try {
-    const parsed = JSON.parse(decodedText);
-    token = parsed.token;
-  } catch (e) {}
+  <script>
+    const flowUrl = "https://f0e3c06ec378e576bef89b03e45d43.81.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/604430a75a6c471b9e34349ce70ca1f7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=k3AECdPl2iIkAI9d958l20oQaKt7QSmHZ3XxMkr_2uk";
 
-  fetch(flowUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      token: token,
-      deviceName: "SharePointScanner"
-    })
-  })
-  .then(async res => {
-    const data = await res.json();
-    document.getElementById("result").innerText = data.message || "Done";
-  })
-  .catch(err => {
-    document.getElementById("result").innerText = "Error connecting to flow";
-    console.error(err);
-  });
-}
+    let latestDecodedText = "";
+    let scannerStarted = false;
 
-function onScanFailure(error) {
-}
-
-const html5QrCode = new Html5Qrcode("reader");
-
-Html5Qrcode.getCameras()
-  .then(devices => {
-    if (!devices || devices.length === 0) {
-      document.getElementById("result").innerText = "No camera found";
-      return;
+    function setResult(message, color = "black") {
+      const el = document.getElementById("result");
+      el.innerText = message;
+      el.style.color = color;
     }
 
-    html5QrCode.start(
-      devices[0].id,
-      { fps: 10, qrbox: 250 },
-      onScanSuccess,
-      onScanFailure
-    );
-  })
-  .catch(err => {
-    document.getElementById("result").innerText = "Camera error";
-    console.error(err);
-  });
-</script>
+    function extractToken(decodedText) {
+      try {
+        const parsed = JSON.parse(decodedText);
+        return parsed.token || "";
+      } catch (e) {
+        return decodedText || "";
+      }
+    }
 
+    function onScanSuccess(decodedText) {
+      if (!decodedText) return;
+
+      latestDecodedText = decodedText;
+      document.getElementById("scannedText").value = decodedText;
+      document.getElementById("checkInBtn").disabled = false;
+      setResult("QR detected. Press Check In.", "#0a58ca");
+    }
+
+    function onScanFailure(error) {
+    }
+
+    async function startScanner() {
+      try {
+        const html5QrCode = new Html5Qrcode("reader");
+
+        await html5QrCode.start(
+          { facingMode: { exact: "environment" } },
+          { fps: 10, qrbox: 250 },
+          onScanSuccess,
+          onScanFailure
+        );
+
+        scannerStarted = true;
+        setResult("Camera ready. Point it at the QR code.");
+      } catch (err) {
+        try {
+          const html5QrCode = new Html5Qrcode("reader");
+
+          await html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: 250 },
+            onScanSuccess,
+            onScanFailure
+          );
+
+          scannerStarted = true;
+          setResult("Camera ready. Point it at the QR code.");
+        } catch (err2) {
+          setResult("Camera error: " + err2, "red");
+          console.error(err2);
+        }
+      }
+    }
+
+    document.getElementById("checkInBtn").addEventListener("click", async function () {
+      const token = extractToken(latestDecodedText);
+
+      if (!token) {
+        setResult("No valid token found.", "red");
+        return;
+      }
+
+      this.disabled = true;
+      setResult("Sending check-in...", "#0a58ca");
+
+      try {
+        const response = await fetch(flowUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            token: token,
+            deviceName: "GitHubScanner"
+          })
+        });
+
+        const data = await response.json();
+        setResult(data.message || "Done", data.success ? "green" : "red");
+      } catch (err) {
+        setResult("Error connecting to flow.", "red");
+        console.error(err);
+      } finally {
+        this.disabled = false;
+      }
+    });
+
+    startScanner();
+  </script>
 </body>
 </html>
