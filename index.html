@@ -1,153 +1,242 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QR Check-In</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Event Check-In</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#15191d; --surface:#1e242a; --line:#2c353d;
+  --ink:#f0efec; --dim:#96a1aa; --amber:#e0a526;
+  --go:#4aa564; --go-bg:#16301e;
+  --warn:#d9922f; --warn-bg:#2f2516;
+  --stop:#d9564c; --stop-bg:#2f1a18;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  display:flex;flex-direction:column}
+header{padding:14px 16px;border-bottom:1px solid var(--line);background:var(--surface)}
+header h1{margin:0;font-size:1.05rem;font-weight:600}
+nav{display:flex;background:var(--surface);border-bottom:1px solid var(--line)}
+nav button{flex:1;padding:13px 4px;background:none;border:none;
+  border-bottom:2px solid transparent;color:var(--dim);font-size:.92rem;
+  font-weight:550;cursor:pointer}
+nav button.active{color:var(--amber);border-bottom-color:var(--amber)}
+main{flex:1;overflow-y:auto}
+.panel{display:none;padding:16px}
+.panel.active{display:block}
+#reader{border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000}
+#reader video{display:block;width:100%}
+.hint{text-align:center;color:var(--dim);font-size:.85rem;margin:14px 0 0;line-height:1.5}
+.result{border-radius:12px;padding:22px 18px;text-align:center;
+  border:1px solid var(--line);background:var(--surface);margin-bottom:14px}
+.result.go{background:var(--go-bg);border-color:var(--go)}
+.result.warn{background:var(--warn-bg);border-color:var(--warn)}
+.result.stop{background:var(--stop-bg);border-color:var(--stop)}
+.result .mark{width:46px;height:46px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;margin:0 auto 10px}
+.result.go .mark{background:var(--go);color:#0d2214}
+.result.warn .mark{background:var(--warn);color:#2a1f0f}
+.result.stop .mark{background:var(--stop);color:#2e1210}
+.result .who{font-size:1.25rem;font-weight:650;margin-bottom:3px}
+.result .meta{font-size:.88rem;color:var(--dim);line-height:1.45}
+button.primary{width:100%;padding:15px;border-radius:10px;border:none;
+  background:var(--amber);color:#1a1408;font-size:1rem;font-weight:600;cursor:pointer}
+.search-row{display:flex;gap:8px;margin-bottom:14px}
+.search-row input{flex:1;padding:14px;font-size:1rem;border-radius:10px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.search-row button{padding:0 18px;border-radius:10px;border:none;
+  background:var(--amber);color:#1a1408;font-weight:600;cursor:pointer}
+.person{display:flex;align-items:center;gap:12px;padding:13px 14px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+.person .info{flex:1;min-width:0}
+.person .nm{font-weight:600;font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person .sub{font-size:.8rem;color:var(--dim);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person .act{padding:9px 14px;border-radius:8px;border:none;background:var(--amber);
+  color:#1a1408;font-weight:600;font-size:.85rem;cursor:pointer;white-space:nowrap}
+.person.done{opacity:.6}
+.person .badge{font-size:.8rem;color:var(--go);font-weight:600;white-space:nowrap}
+.empty,.spin{text-align:center;color:var(--dim);font-size:.9rem;padding:32px 20px;line-height:1.5}
+</style>
 </head>
-<body style="text-align:center;font-family:Arial,sans-serif;padding:20px;">
-  <h2>QR Check-In</h2>
+<body>
 
-  <div id="reader" style="width:320px;max-width:100%;margin:0 auto 20px auto;"></div>
+<header><h1>Event Check-In</h1></header>
 
-  <div style="max-width:420px;margin:0 auto;text-align:left;">
-    <label style="font-weight:bold;display:block;margin-bottom:8px;">Scanned value</label>
-    <textarea id="scannedText" rows="4" style="width:100%;padding:10px;box-sizing:border-box;" readonly></textarea>
+<nav>
+  <button data-tab="scan" class="active">Scan</button>
+  <button data-tab="search">Search</button>
+</nav>
 
-    <button id="checkInBtn" style="margin-top:12px;padding:12px 20px;font-size:16px;cursor:pointer;" disabled>
-      Check In
-    </button>
+<main>
+  <section class="panel active" id="panel-scan">
+    <div id="scanResult"></div>
+    <div id="readerWrap">
+      <div id="reader"></div>
+      <p class="hint" id="scanHint">Point the camera at the attendee's QR code</p>
+    </div>
+  </section>
 
-    <div id="resultBox" style="margin-top:20px;"></div>
-  </div>
+  <section class="panel" id="panel-search">
+    <div class="search-row">
+      <input id="q" type="text" placeholder="Name or phone number" autocomplete="off" />
+      <button id="searchBtn">Find</button>
+    </div>
+    <div id="searchResults">
+      <p class="empty">If a QR code won't scan, find the person by name or phone and check them in manually.</p>
+    </div>
+  </section>
+</main>
 
-  <script>
-    const flowUrl = "https://f0e3c06ec378e576bef89b03e45d43.81.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/604430a75a6c471b9e34349ce70ca1f7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=k3AECdPl2iIkAI9d958l20oQaKt7QSmHZ3XxMkr_2uk";
+<script>
+/* ============================================================
+   Power Automate HTTP trigger URL.
+   Regenerate this after the event - it is public in this repo.
+   ============================================================ */
+const FLOW_URL = "https://f0e3c06ec378e576bef89b03e45d43.81.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/604430a75a6c471b9e34349ce70ca1f7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=k3AECdPl2iIkAI9d958l20oQaKt7QSmHZ3XxMkr_2uk";
 
-    let latestDecodedText = "";
+let scanner = null, busy = false;
 
-    function renderInfo(message, color = "#111827") {
-      const box = document.getElementById("resultBox");
-      box.innerHTML = `
-        <div style="background:#f3f4f6;border:1px solid #d1d5db;padding:14px;border-radius:8px;color:${color};white-space:pre-line;">
-          ${message}
+async function callFlow(body){
+  const res = await fetch(FLOW_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  });
+  return res.json();
+}
+
+/* ---------- tabs ---------- */
+document.querySelectorAll("nav button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("panel-"+b.dataset.tab).classList.add("active");
+    b.dataset.tab==="scan" ? resume() : pause();
+  });
+});
+
+/* ---------- scanner ---------- */
+function pause(){ try{ if(scanner&&scanner.getState()===2) scanner.pause(true);}catch(e){} }
+function resume(){ try{ if(scanner&&scanner.getState()===3) scanner.resume();}catch(e){} }
+
+async function startScanner(){
+  scanner = new Html5Qrcode("reader");
+  const cfg = {fps:10,qrbox:250};
+  try{
+    await scanner.start({facingMode:{exact:"environment"}},cfg,onScan,()=>{});
+  }catch(e){
+    try{
+      await scanner.start({facingMode:"environment"},cfg,onScan,()=>{});
+    }catch(e2){
+      document.getElementById("readerWrap").innerHTML =
+        `<p class="empty">Camera unavailable. Allow camera access and reload,
+          or use the Search tab to check people in by name.</p>`;
+    }
+  }
+}
+
+function extractToken(text){
+  try{ const p = JSON.parse(text); return p.token || ""; }
+  catch(e){ return text || ""; }
+}
+
+async function onScan(decodedText){
+  if(busy || !decodedText) return;
+  busy = true; pause();
+
+  const token = extractToken(decodedText);
+  if(!token){
+    show("stop","\u2715","Not a valid ticket","Try the Search tab to find them by name.");
+    return;
+  }
+
+  show("","\u2026","Checking\u2026","");
+  try{
+    const data = await callFlow({action:"checkin",token:token,deviceName:"GitHubScanner"});
+    render(data,show);
+  }catch(e){
+    show("stop","\u2715","Connection problem","Couldn't reach the check-in system. Try again.");
+  }
+}
+
+function render(data,fn){
+  if(data.status==="ok" || data.success===true){
+    fn("go","\u2713",data.name||"Checked in",
+       [data.company,data.time?"at "+fmt(data.time):""].filter(Boolean).join(" \u00b7 "));
+  }else if(data.status==="already"){
+    fn("warn","!",data.name||"Already checked in",
+       data.time?"Checked in at "+fmt(data.time):"This ticket was already used.");
+  }else{
+    fn("stop","\u2715","Not found",data.message||"No registration matches this code.");
+  }
+}
+
+function show(kind,mark,who,meta){
+  const el = document.getElementById("scanResult");
+  el.innerHTML = `
+    <div class="result ${kind}">
+      <div class="mark">${mark}</div>
+      <div class="who">${esc(who)}</div>
+      <div class="meta">${esc(meta)}</div>
+    </div>
+    ${kind?'<button class="primary" id="next">Scan next attendee</button>':''}`;
+  const n = document.getElementById("next");
+  if(n) n.addEventListener("click",()=>{ el.innerHTML=""; busy=false; resume(); });
+}
+
+/* ---------- search ---------- */
+document.getElementById("searchBtn").addEventListener("click",doSearch);
+document.getElementById("q").addEventListener("keydown",e=>{ if(e.key==="Enter") doSearch(); });
+
+async function doSearch(){
+  const q = document.getElementById("q").value.trim();
+  const box = document.getElementById("searchResults");
+  if(q.length<2){ box.innerHTML=`<p class="empty">Type at least 2 characters.</p>`; return; }
+
+  box.innerHTML = `<p class="spin">Searching\u2026</p>`;
+  try{
+    const data = await callFlow({action:"search",query:q});
+    const list = data.results || [];
+    if(!list.length){ box.innerHTML=`<p class="empty">No one matches that name or number.</p>`; return; }
+    box.innerHTML = list.map(p=>`
+      <div class="person ${p.checkedIn?'done':''}">
+        <div class="info">
+          <div class="nm">${esc(p.name||"(no name)")}</div>
+          <div class="sub">${esc([p.company,p.phone].filter(Boolean).join(" \u00b7 "))}</div>
         </div>
-      `;
-    }
+        ${p.checkedIn
+          ? `<div class="badge">\u2713 ${p.time?fmt(p.time):"In"}</div>`
+          : `<button class="act" data-token="${esc(p.token||"")}">Check in</button>`}
+      </div>`).join("");
+    box.querySelectorAll(".act").forEach(b=>b.addEventListener("click",()=>manual(b)));
+  }catch(e){
+    box.innerHTML = `<p class="empty">Couldn't reach the check-in system. Try again.</p>`;
+  }
+}
 
-    function renderSuccess(data) {
-      const box = document.getElementById("resultBox");
-      box.innerHTML = `
-        <div style="background:#ecfdf5;border:1px solid #10b981;padding:16px;border-radius:8px;color:#065f46;">
-          <div style="font-size:18px;font-weight:bold;margin-bottom:10px;">Checked In</div>
-          <div><strong>Name:</strong> ${data.employeeName || "-"}</div>
-          <div><strong>ID:</strong> ${data.employeeId || "-"}</div>
-          <div><strong>Time:</strong> ${data.time || "-"}</div>
-        </div>
-      `;
-    }
+async function manual(btn){
+  btn.disabled = true; btn.textContent = "\u2026";
+  try{
+    const data = await callFlow({action:"checkin",token:btn.dataset.token,deviceName:"GitHubScanner-Manual"});
+    if(data.status==="ok"||data.status==="already"||data.success===true){
+      btn.closest(".person").classList.add("done");
+      btn.outerHTML = `<div class="badge">\u2713 In</div>`;
+    }else{ btn.disabled=false; btn.textContent="Retry"; }
+  }catch(e){ btn.disabled=false; btn.textContent="Retry"; }
+}
 
-    function renderError(message) {
-      const box = document.getElementById("resultBox");
-      box.innerHTML = `
-        <div style="background:#fef2f2;border:1px solid #ef4444;padding:16px;border-radius:8px;color:#991b1b;">
-          <div style="font-size:18px;font-weight:bold;margin-bottom:8px;">Error</div>
-          <div>${message}</div>
-        </div>
-      `;
-    }
+/* ---------- utils ---------- */
+function fmt(iso){ try{ return new Date(iso).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
+function esc(s){ return String(s==null?"":s)
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 
-    function extractToken(decodedText) {
-      try {
-        const parsed = JSON.parse(decodedText);
-        return parsed.token || "";
-      } catch (e) {
-        return decodedText || "";
-      }
-    }
-
-    function onScanSuccess(decodedText) {
-      if (!decodedText) return;
-
-      latestDecodedText = decodedText;
-      document.getElementById("scannedText").value = decodedText;
-      document.getElementById("checkInBtn").disabled = false;
-      renderInfo("QR detected. Press Check In.", "#0a58ca");
-    }
-
-    function onScanFailure(error) {
-    }
-
-    async function startScanner() {
-      try {
-        const html5QrCode = new Html5Qrcode("reader");
-
-        await html5QrCode.start(
-          { facingMode: { exact: "environment" } },
-          { fps: 10, qrbox: 250 },
-          onScanSuccess,
-          onScanFailure
-        );
-
-        renderInfo("Camera ready. Point it at the QR code.");
-      } catch (err) {
-        try {
-          const html5QrCode = new Html5Qrcode("reader");
-
-          await html5QrCode.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: 250 },
-            onScanSuccess,
-            onScanFailure
-          );
-
-          renderInfo("Camera ready. Point it at the QR code.");
-        } catch (err2) {
-          renderError("Camera error: " + err2);
-          console.error(err2);
-        }
-      }
-    }
-
-    document.getElementById("checkInBtn").addEventListener("click", async function () {
-      const token = extractToken(latestDecodedText);
-
-      if (!token) {
-        renderError("No valid token found.");
-        return;
-      }
-
-      this.disabled = true;
-      renderInfo("Sending check-in...", "#0a58ca");
-
-      try {
-        const response = await fetch(flowUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            token: token,
-            deviceName: "GitHubScanner"
-          })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          renderSuccess(data);
-        } else {
-          renderError(data.message || "Check-in failed.");
-        }
-      } catch (err) {
-        renderError("Error connecting to flow.");
-        console.error(err);
-      } finally {
-        this.disabled = false;
-      }
-    });
-
-    startScanner();
-  </script>
+startScanner();
+</script>
 </body>
 </html>
