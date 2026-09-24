@@ -60,6 +60,11 @@ button.primary{width:100%;padding:15px;border-radius:10px;border:none;
 .person.done{opacity:.6}
 .person .badge{font-size:.8rem;color:var(--go);font-weight:600;white-space:nowrap}
 .empty,.spin{text-align:center;color:var(--dim);font-size:.9rem;padding:32px 20px;line-height:1.5}
+.lead{color:var(--dim);font-size:.88rem;line-height:1.5;margin:0 0 18px}
+.fld{display:block;margin-bottom:14px;font-size:.85rem;color:var(--dim)}
+.fld input{width:100%;margin-top:6px;padding:14px;font-size:1rem;border-radius:10px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.req{color:var(--stop)}
 </style>
 </head>
 <body>
@@ -69,6 +74,7 @@ button.primary{width:100%;padding:15px;border-radius:10px;border:none;
 <nav>
   <button data-tab="scan" class="active">Scan</button>
   <button data-tab="search">Search</button>
+  <button data-tab="walkin">Walk-in</button>
 </nav>
 
 <main>
@@ -87,6 +93,26 @@ button.primary{width:100%;padding:15px;border-radius:10px;border:none;
     </div>
     <div id="searchResults">
       <p class="empty">If a QR code won't scan, find the person by name or phone and check them in manually.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-walkin">
+    <div id="walkinResult"></div>
+    <div id="walkinForm">
+      <p class="lead">For guests who never registered. This adds them and checks them in.</p>
+      <label class="fld">Нэр (Name) <span class="req">*</span>
+        <input id="wName" type="text" autocomplete="off" />
+      </label>
+      <label class="fld">Утас (Phone)
+        <input id="wPhone" type="tel" inputmode="tel" autocomplete="off" />
+      </label>
+      <label class="fld">Байгууллага (Company)
+        <input id="wCompany" type="text" autocomplete="off" />
+      </label>
+      <label class="fld">Имэйл (Email)
+        <input id="wEmail" type="email" autocomplete="off" />
+      </label>
+      <button class="primary" id="wSubmit">Add and check in</button>
     </div>
   </section>
 </main>
@@ -228,6 +254,53 @@ async function manual(btn){
       btn.outerHTML = `<div class="badge">\u2713 In</div>`;
     }else{ btn.disabled=false; btn.textContent="Retry"; }
   }catch(e){ btn.disabled=false; btn.textContent="Retry"; }
+}
+
+/* ---------- walk-in ---------- */
+document.getElementById("wSubmit").addEventListener("click",addWalkin);
+
+async function addWalkin(){
+  const btn = document.getElementById("wSubmit");
+  const name = document.getElementById("wName").value.trim();
+  const phone = document.getElementById("wPhone").value.trim();
+  const company = document.getElementById("wCompany").value.trim();
+  const email = document.getElementById("wEmail").value.trim();
+
+  if(name.length < 2){
+    showWalkin("stop","\u2715","Name required","Enter at least the guest's name.");
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = "Adding\u2026";
+
+  try{
+    const data = await callFlow({
+      action:"walkin", name:name, phone:phone,
+      company:company, email:email, deviceName:"GitHubScanner-Walkin"
+    });
+
+    if(data.status==="ok" || data.success===true){
+      showWalkin("go","\u2713",data.name||name,"Added and checked in");
+      ["wName","wPhone","wCompany","wEmail"].forEach(id=>document.getElementById(id).value="");
+    }else{
+      showWalkin("stop","\u2715","Could not add",data.message||"Something went wrong. Try again.");
+    }
+  }catch(e){
+    showWalkin("stop","\u2715","Connection problem","Couldn't reach the check-in system. Try again.");
+  }
+
+  btn.disabled = false; btn.textContent = "Add and check in";
+}
+
+function showWalkin(kind,mark,who,meta){
+  const el = document.getElementById("walkinResult");
+  el.innerHTML = `
+    <div class="result ${kind}">
+      <div class="mark">${mark}</div>
+      <div class="who">${esc(who)}</div>
+      <div class="meta">${esc(meta)}</div>
+    </div>`;
+  if(kind==="go") setTimeout(()=>{ el.innerHTML=""; },4000);
 }
 
 /* ---------- utils ---------- */
